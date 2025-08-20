@@ -15,7 +15,24 @@ repositories, objects, commits, trees, and more — by rebuilding them from scra
 - 📝 Add and commit files *(Work in Progress)*  
 - 🔍 Inspect objects (`cat-file`, `ls-tree`, etc.)  
 - 🏷️ Manage refs and tags  
-- ✅ Basic status and log commands  
+- ✅ Basic status and log commands
+
+## 🎯 Goals
+
+- Learn Git internals by coding them step by step
+
+- Provide a reference for students & enthusiasts
+
+- Create a playground for experimenting with version control
+
+## 🤝 Contributing
+
+Contributions, issues, and pull requests are welcome!
+If you’re also studying Git internals, feel free to fork and extend the project.
+
+## 📜 License
+
+MIT License – free to use, modify, and distribute.
 
 ---
 
@@ -34,3 +51,5 @@ cd wyag-lite
 
 # Initialize a new repository
 python3 wyag.py init myrepo
+
+
