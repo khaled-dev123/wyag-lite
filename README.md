@@ -29,3 +29,8 @@ No external libraries (only standard library)
 ▶️ Usage
 
 Clone the repository and run the wyag.py script:
+git clone https://github.com/your-username/wyag-lite.git
+cd wyag-lite
+
+# Initialize a new repository
+python3 wyag.py init myrepo
