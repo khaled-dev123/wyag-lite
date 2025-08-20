@@ -29,7 +29,7 @@ repositories, objects, commits, trees, and more — by rebuilding them from scra
 Clone the repository and run the `wyag.py` script:
 
 ```bash
-git clone https://github.com/your-username/wyag-lite.git
+git clone https://github.com/khaled-dev123/wyag-lite.git
 cd wyag-lite
 
 # Initialize a new repository
