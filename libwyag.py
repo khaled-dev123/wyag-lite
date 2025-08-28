@@ -3,9 +3,10 @@ import configparser
 import hashlib, zlib
 import sys
 
-# ----------------------------
+# ============================================================
 # Repository Abstraction
-# ----------------------------
+# ============================================================
+
 class GitRepository(object):
     """A git repository"""
 
@@ -80,17 +81,21 @@ def repo_create(path):
     else:
         os.makedirs(repo.worktree)
 
+    # Directories
     assert repo_dir(repo, "branches", mkdir=True)
     assert repo_dir(repo, "objects", mkdir=True)
     assert repo_dir(repo, "refs", "tags", mkdir=True)
     assert repo_dir(repo, "refs", "heads", mkdir=True)
 
+    # description
     with open(repo_file(repo, "description"), "w") as f:
         f.write("Unnamed repository; edit this file 'description' to name the repository.\n")
 
+    # HEAD
     with open(repo_file(repo, "HEAD"), "w") as f:
         f.write("ref: refs/heads/master\n")
 
+    # config
     with open(repo_file(repo, "config"), "w") as f:
         config = repo_default_config()
         config.write(f)
@@ -98,9 +103,10 @@ def repo_create(path):
     return repo
 
 
-# ----------------------------
+# ============================================================
 # Object System
-# ----------------------------
+# ============================================================
+
 class GitObject(object):
     def __init__(self, data=None):
         if data is not None:
@@ -118,13 +124,18 @@ class GitObject(object):
         pass
 
 
+# ----------------------------
+# Blob
+# ----------------------------
 class GitBlob(GitObject):
     fmt = b"blob"
     def serialize(self): return self.blobdata
     def deserialize(self, data): self.blobdata = data
 
 
-# Commit object ----------------------------
+# ----------------------------
+# Commit
+# ----------------------------
 def kvlm_parse(raw, start=0, dct=None):
     if not dct: dct = dict()
 
@@ -173,7 +184,67 @@ class GitCommit(GitObject):
     def init(self): self.kvlm = dict()
 
 
-# Object read/write ----------------------------
+# ----------------------------
+# Tree
+# ----------------------------
+class GitTreeLeaf(object):
+    def __init__(self, mode, path, sha):
+        self.mode = mode
+        self.path = path
+        self.sha = sha
+
+def tree_parse_one(raw, start=0):
+    x = raw.find(b' ', start)
+    assert x - start == 5 or x - start == 6
+
+    mode = raw[start:x]
+    if len(mode) == 5:
+        mode = b"0" + mode
+
+    y = raw.find(b'\x00', x)
+    path = raw[x+1:y]
+
+    raw_sha = int.from_bytes(raw[y+1:y+21], "big")
+    sha = format(raw_sha, "040x")
+
+    return y+21, GitTreeLeaf(mode, path.decode("utf8"), sha)
+
+def tree_parse(raw):
+    pos = 0
+    ret = []
+    while pos < len(raw):
+        pos, leaf = tree_parse_one(raw, pos)
+        ret.append(leaf)
+    return ret
+
+def tree_leaf_sort_key(leaf):
+    if leaf.mode.startswith(b"10"):
+        return leaf.path
+    else:
+        return leaf.path + "/"
+
+def tree_serialize(obj):
+    obj.items.sort(key=tree_leaf_sort_key)
+    ret = b''
+    for leaf in obj.items:
+        ret += leaf.mode
+        ret += b' '
+        ret += leaf.path.encode("utf8")
+        ret += b'\x00'
+        sha = int(leaf.sha, 16)
+        ret += sha.to_bytes(20, byteorder="big")
+    return ret
+
+class GitTree(GitObject):
+    fmt = b'tree'
+    def deserialize(self, data): self.items = tree_parse(data)
+    def serialize(self): return tree_serialize(self)
+    def init(self): self.items = []
+
+
+# ============================================================
+# Object read/write
+# ============================================================
 def object_write(repo, obj, actually_write=True):
     data = obj.serialize()
     result = obj.fmt + b" " + str(len(data)).encode() + b"\x00" + data
@@ -206,15 +277,17 @@ def object_read(repo, sha):
         c = GitBlob
     elif fmt == b'commit':
         c = GitCommit
+    elif fmt == b'tree':
+        c = GitTree
     else:
         raise Exception(f"Unknown type {fmt.decode('ascii')} for object {sha}")
 
     return c(body)
 
 
-# ----------------------------
+# ============================================================
 # Commands
-# ----------------------------
+# ============================================================
 def cmd_init(args):
     repo_create(args.path)
     print(f"Initialized empty WYAG repository in {os.path.join(args.path, '.git')}")
@@ -226,6 +299,8 @@ def object_hash(fd, fmt, repo=None):
         obj = GitBlob(data)
     elif fmt == b'commit':
         obj = GitCommit(data)
+    elif fmt == b'tree':
+        obj = GitTree(data)
     else:
         raise Exception(f"Unknown type {fmt}!")
     return object_write(repo, obj, actually_write=(repo is not None))
@@ -267,9 +342,9 @@ def repo_find(path=".", required=True):
     return repo_find(parent, required)
 
 
-# ----------------------------
+# ============================================================
 # Log command
-# ----------------------------
+# ============================================================
 def cmd_log(args):
     repo = repo_find()
     print("digraph wyaglog{")
@@ -299,3 +374,45 @@ def log_graphviz(repo, sha, seen):
         p = p.decode("ascii")
         print(f"  c_{sha} -> c_{p};")
         log_graphviz(repo, p, seen)
+
+# ----------------------------
+# Checkout command
+# ----------------------------
+def cmd_checkout(args):
+    repo = repo_find()
+
+    # Read the given object
+    obj = object_read(repo, object_find(repo, args.commit))
+
+    # If it's a commit, resolve to its tree
+    if obj.fmt == b'commit':
+        obj = object_read(repo, obj.kvlm[b'tree'].decode("ascii"))
+
+    # Ensure the target path is an empty directory
+    if os.path.exists(args.path):
+        if not os.path.isdir(args.path):
+            raise Exception(f"Not a directory: {args.path}")
+        if os.listdir(args.path):
+            raise Exception(f"Not empty: {args.path}")
+    else:
+        os.makedirs(args.path)
+
+    # Perform the checkout
+    tree_checkout(repo, obj, os.path.realpath(args.path))
+
+
+def tree_checkout(repo, tree, path):
+    """Recursively checkout a tree into the target path."""
+    for item in tree.items:
+        obj = object_read(repo, item.sha)
+        dest = os.path.join(path, item.path)
+
+        if obj.fmt == b'tree':
+            os.mkdir(dest)
+            tree_checkout(repo, obj, dest)
+
+        elif obj.fmt == b'blob':
+            # NOTE: symlinks (mode 12****) not yet supported
+            with open(dest, "wb") as f:
+                f.write(obj.blobdata)
+

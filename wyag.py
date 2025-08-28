@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 import argparse
 import sys
-import libwyag  # your implementation file
+import libwyag   # your core implementation
 
-
-# ----------------------------
+# ======================================================
 # Argument parser setup
-# ----------------------------
+# ======================================================
 argparser = argparse.ArgumentParser(description="The stupidest content tracker")
 argsubparsers = argparser.add_subparsers(title="Commands", dest="command")
 argsubparsers.required = True
@@ -21,10 +20,8 @@ sp.add_argument("path",
 sp.set_defaults(func=libwyag.cmd_init)
 
 # --- hash-object ---
-sp = argsubparsers.add_parser(
-    "hash-object",
-    help="Compute object ID and optionally creates a blob from a file"
-)
+sp = argsubparsers.add_parser("hash-object",
+                              help="Compute object ID and optionally create a blob from a file")
 sp.add_argument("-t",
                 metavar="type",
                 dest="type",
@@ -50,7 +47,7 @@ sp.add_argument("object",
                 help="The object to display")
 sp.set_defaults(func=libwyag.cmd_cat_file)
 
-# log
+# --- log ---
 argsp = argsubparsers.add_parser("log", help="Display history of a given commit.")
 argsp.add_argument("commit",
                    default="HEAD",
@@ -58,15 +55,29 @@ argsp.add_argument("commit",
                    help="Commit to start at.")
 argsp.set_defaults(func=libwyag.cmd_log)
 
+# --- ls-tree ---
+argsp = argsubparsers.add_parser("ls-tree", help="Pretty-print a tree object.")
+argsp.add_argument("-r",
+                   dest="recursive",
+                   action="store_true",
+                   help="Recurse into sub-trees")
+argsp.add_argument("tree",
+                   help="A tree-ish object.")
+argsp.set_defaults(func=libwyag.cmd_ls_tree)
+
+# --- checkout ---
+argsp = argsubparsers.add_parser("checkout", help="Checkout a commit inside of a directory.")
+argsp.add_argument("commit", help="The commit or tree to checkout.")
+argsp.add_argument("path", help="The EMPTY directory to checkout on.")
+argsp.set_defaults(func=libwyag.cmd_checkout)
 
 
-# ----------------------------
+# ======================================================
 # Main entrypoint
-# ----------------------------
+# ======================================================
 def main(argv=sys.argv[1:]):
     args = argparser.parse_args(argv)
-    args.func(args)   # dispatch to the correct function
-
+    args.func(args)
 
 if __name__ == "__main__":
     main()
