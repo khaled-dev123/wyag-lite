@@ -47,7 +47,8 @@ Clone the repository and run the `wyag.py` script:
 
 ```bash
 git clone https://github.com/khaled-dev123/wyag-lite.git
-cd git
+cd wyag-lite
+
 
 # Initialize a new repository
 python3 wyag.py init myrepo
